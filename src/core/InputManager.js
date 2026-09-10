@@ -15,6 +15,7 @@ export class InputManager {
   init() {
     // Клавиатура
     window.addEventListener('keydown', (e) => {
+      this.trigger('keydown-any', e);
       if (!this.keys.get(e.code)) {
         this.keys.set(e.code, true);
         this.trigger('keydown', e);

@@ -6,8 +6,10 @@
 import { Game } from './core/Game.js';
 import { config } from './config.js';
 
-// Включаем terrain для этапа 2
+// Включаем terrain и управляемый Huey для текущего игрового среза
 config.ENABLE_TERRAIN = true;
+config.ENABLE_HUEY = true;
+config.ENABLE_ENEMIES = true;
 
 // Глобальная переменная для доступа из консоли
 window.game = null;

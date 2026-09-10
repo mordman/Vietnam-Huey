@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" href="data:," />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vietnam Huey - Вертолётный симулятор</title>
     <style>
@@ -47,6 +47,59 @@
         z-index: 1000;
         pointer-events: none;
         text-align: right;
+      }
+
+      #hud {
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        min-width: 210px;
+        padding: 12px 14px;
+        color: #d8f3d4;
+        background: rgba(10, 24, 18, 0.78);
+        border-left: 3px solid #b7d957;
+        font-size: 13px;
+        line-height: 1.7;
+        letter-spacing: 0.04em;
+        z-index: 1000;
+        pointer-events: none;
+      }
+
+      #hud span {
+        color: #fff6b0;
+        float: right;
+        margin-left: 24px;
+      }
+
+      #pause-menu.hidden {
+        display: none;
+      }
+
+      #pause-menu {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: rgba(5, 12, 10, 0.72);
+        color: #f5f1c5;
+        z-index: 5000;
+      }
+
+      #pause-menu section {
+        min-width: 260px;
+        padding: 24px;
+        border: 1px solid #b7d957;
+        background: #14231d;
+        text-align: center;
+      }
+
+      #pause-menu button {
+        margin-top: 18px;
+        padding: 8px 18px;
+        color: #14231d;
+        background: #b7d957;
+        border: 0;
+        cursor: pointer;
       }
       
       #loading {
@@ -113,6 +166,22 @@
       <div>Physics: <span id="physics-status">OFF</span></div>
       <div>Terrain: <span id="terrain-status">OFF</span></div>
       <div>Chunks: <span id="chunks-count">0</span></div>
+      <div>Ammo: <span id="ammo-count">500</span></div>
+    </div>
+
+    <div id="hud" data-position="3">
+      <div>POSITION <span data-hud="position">EXTERNAL</span></div>
+      <div>ALTITUDE <span data-hud="altitude">--</span></div>
+      <div>SPEED <span data-hud="speed">--</span></div>
+      <div>HULL <span data-hud="health">--</span></div>
+      <div>AMMO <span data-hud="ammo">500</span></div>
+    </div>
+
+    <div id="pause-menu" class="hidden">
+      <section>
+        <h2>PAUSED</h2>
+        <button type="button" data-action="resume">RESUME</button>
+      </section>
     </div>
     
     <script type="module" src="/src/main.js"></script>

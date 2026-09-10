@@ -49,6 +49,13 @@ export class PhysicsWorld {
     return body;
   }
 
+  removeBody(body) {
+    const mesh = this.bodyMeshMap.get(body);
+    if (mesh) this.meshBodyMap.delete(mesh);
+    this.bodyMeshMap.delete(body);
+    if (this.world && body) this.world.removeRigidBody(body);
+  }
+
   /**
    * Создать динамическое тело
    * @param {THREE.Mesh} mesh - Three.js меш
@@ -61,15 +68,13 @@ export class PhysicsWorld {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic();
     
     if (ccd) {
-      bodyDesc.enableCcd(true);
+      bodyDesc.setCcdEnabled(true);
     }
-    
+
     const body = this.world.createRigidBody(bodyDesc);
     const collider = this.world.createCollider(colliderDesc, body);
-    
-    // Установка массы
     if (mass > 0) {
-      body.setMass(mass);
+      body.setAdditionalMass(mass, true);
     }
     
     this.bodyMeshMap.set(body, mesh);
@@ -178,6 +183,8 @@ export class PhysicsWorld {
     const hit = this.world.castRay(ray, maxToi, true, filterGroups);
     
     if (hit && hit.collider) {
+      const body = hit.collider.parent();
+      const mesh = body ? this.bodyMeshMap.get(body) : null;
       result = {
         point: hit.toi ? {
           x: from.x + ray.dir.x * hit.toi,
@@ -185,6 +192,9 @@ export class PhysicsWorld {
           z: from.z + ray.dir.z * hit.toi,
         } : null,
         distance: hit.toi || 0,
+        collider: hit.collider,
+        body,
+        mesh,
       };
     }
     

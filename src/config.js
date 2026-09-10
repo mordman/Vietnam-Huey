@@ -12,7 +12,7 @@ export const config = {
   ENABLE_ENEMIES: false,
   ENABLE_DAMAGE: false,
   ENABLE_AUDIO: false,
-  ENABLE_HUD: false,
+  ENABLE_HUD: true,
   
   // Настройки физики
   PHYSICS: {

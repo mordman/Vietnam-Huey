@@ -4,12 +4,25 @@
  */
 
 import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d-compat';
 import { config } from '../config.js';
 import { Time } from './Time.js';
 import { InputManager } from './InputManager.js';
 import { PhysicsWorld } from '../physics/PhysicsWorld.js';
 import { DebugRenderer } from '../physics/DebugRenderer.js';
 import { ChunkManager } from '../terrain/ChunkManager.js';
+import { HueyModel } from '../helicopter/HueyModel.js';
+import { FlightController } from '../helicopter/FlightController.js';
+import { PlayerController } from '../player/PlayerController.js';
+import { M60 } from '../weapons/M60.js';
+import { DamageSystem } from '../helicopter/DamageSystem.js';
+import { EnemyManager } from '../enemies/EnemyManager.js';
+import { ProjectileManager } from '../weapons/Projectiles.js';
+import { Explosion } from '../weapons/Explosion.js';
+import { AAAGun } from '../enemies/AAAGun.js';
+import { HUD } from '../ui/HUD.js';
+import { AudioManager } from './AudioManager.js';
+import { PauseMenu } from '../ui/PauseMenu.js';
 
 export class Game {
   constructor() {
@@ -21,6 +34,19 @@ export class Game {
     this.physicsWorld = null;
     this.debugRenderer = null;
     this.chunkManager = null;
+    this.helicopter = null;
+    this.flightController = null;
+    this.playerController = null;
+    this.m60 = null;
+    this.damageSystem = null;
+    this.enemyManager = null;
+    this.projectileManager = null;
+    this.explosion = null;
+    this.aaGun = null;
+    this.hud = null;
+    this.audio = null;
+    this.pauseMenu = null;
+    this.paused = false;
     this.isRunning = false;
     this.objects = []; // Объекты для обновления
     
@@ -43,6 +69,11 @@ export class Game {
     // Ввод
     this.inputManager = new InputManager();
     this.inputManager.init();
+    this.audio = new AudioManager();
+    this.inputManager.on('keydown-any', (event) => {
+      this.audio.resume();
+      if (event.code === 'Escape') this.togglePause();
+    });
     
     // Сцена
     this.initScene();
@@ -78,17 +109,102 @@ export class Game {
       
       console.log('Terrain system initialized');
     }
+
+    if (config.ENABLE_HUEY && this.physicsWorld) {
+      this.damageSystem = new DamageSystem();
+      this.createHuey();
+      this.createTestTarget();
+      this.damageSystem.register(this.helicopter, {
+        health: 200,
+        zone: 'fuselage',
+        onDestroyed: () => { this.helicopter.visible = false; },
+      });
+      this.explosion = new Explosion(this.scene, this.damageSystem, this.audio);
+      this.projectileManager = new ProjectileManager(
+        this.scene,
+        this.physicsWorld,
+        this.damageSystem,
+        this.explosion
+      );
+      this.aaGun = new AAAGun(this.scene, this.projectileManager, this.explosion, this.helicopter);
+      this.aaGun.place(new THREE.Vector3(70, 8, -80));
+      this.addObject(this.projectileManager);
+      this.addObject(this.explosion);
+      this.addObject(this.aaGun);
+      if (config.ENABLE_ENEMIES) {
+        this.enemyManager = new EnemyManager(
+          this.scene,
+          this.physicsWorld,
+          this.damageSystem,
+          { seed: 3, maxEnemies: 8 }
+        );
+        this.enemyManager.spawnAround(this.helicopter.position);
+        this.addObject(this.enemyManager);
+      }
+      if (config.ENABLE_HUD) {
+        this.hud = new HUD(document.getElementById('hud'), {
+          helicopter: this.helicopter,
+          flightController: this.flightController,
+          playerController: this.playerController,
+          m60: this.m60,
+          damageSystem: this.damageSystem,
+        });
+        this.addObject(this.hud);
+      }
+    }
     
     // Тестовые объекты (только если terrain отключён)
     if (!config.ENABLE_TERRAIN) {
       this.createTestObjects();
-    } else {
+    } else if (!config.ENABLE_HUEY) {
       // Создаём тестовый куб над terrain
       this.createTestCube();
     }
     
     console.log('Vietnam Huey - Initialization complete');
+    this.pauseMenu = new PauseMenu(document.getElementById('pause-menu'), () => this.togglePause(false));
     return this;
+  }
+
+  createHuey() {
+    const model = new HueyModel();
+    model.root.position.set(0, 120, 0);
+    this.scene.add(model.root);
+    const colliderDesc = RAPIER.ColliderDesc.cuboid(3.8, 1.8, 7);
+    const body = this.physicsWorld.createDynamicBody(model.root, colliderDesc, 2200, true);
+    this.helicopter = model.root;
+    this.flightController = new FlightController(body, model, this.inputManager);
+    this.playerController = new PlayerController(model.root, this.inputManager);
+    this.m60 = new M60(
+      this.scene,
+      this.camera,
+      this.physicsWorld,
+      this.inputManager,
+      this.playerController,
+        this.damageSystem,
+        this.audio
+    );
+    this.addObject(this.flightController);
+    this.addObject(this.playerController);
+    this.addObject(this.m60);
+  }
+
+  createTestTarget() {
+    const geometry = new THREE.BoxGeometry(5, 7, 2);
+    const material = new THREE.MeshStandardMaterial({ color: 0x9c3026, roughness: 0.8 });
+    const target = new THREE.Mesh(geometry, material);
+    target.position.set(0, 120, -80);
+    target.castShadow = true;
+    this.scene.add(target);
+    const body = this.physicsWorld.createStaticBody(target, RAPIER.ColliderDesc.cuboid(2.5, 3.5, 1));
+    this.damageSystem.register(target, {
+      health: 100,
+      zone: 'target',
+      onDestroyed: () => {
+        target.visible = false;
+        this.physicsWorld.removeBody(body);
+      },
+    });
   }
 
   /**
@@ -234,12 +350,18 @@ export class Game {
     // Обновление времени
     const delta = this.time.update(timestamp);
 
+    if (this.paused) {
+      this.renderer.render(this.scene, this.camera);
+      requestAnimationFrame((ts) => this.gameLoop(ts));
+      return;
+    }
+
     // Обработка ввода для камеры (свободный полёт)
-    this.handleCameraInput(delta);
+    if (!this.helicopter) this.handleCameraInput(delta);
 
     // Обновление terrain чанков
     if (this.chunkManager && config.ENABLE_TERRAIN) {
-      this.chunkManager.update(this.camera.position);
+      this.chunkManager.update(this.helicopter?.position ?? this.camera.position);
       
       // Обновляем счётчик чанков в debug info
       const chunksCountEl = document.getElementById('chunks-count');
@@ -271,6 +393,13 @@ export class Game {
       }
     });
 
+    if (this.flightController) {
+      const velocity = this.flightController.body.linvel();
+      this.audio.update(Math.hypot(velocity.x, velocity.y, velocity.z));
+    }
+
+    if (this.helicopter) this.updateHelicopterCamera(delta);
+
     // Сброс дельты мыши
     if (this.inputManager) {
       this.inputManager.resetMouseDelta();
@@ -281,6 +410,20 @@ export class Game {
 
     // Рендер сцены
     this.renderer.render(this.scene, this.camera);
+  }
+
+  togglePause(force = null) {
+    this.paused = force === null ? !this.paused : force;
+    this.pauseMenu?.toggle(this.paused);
+    if (this.paused) this.audio.context?.suspend();
+    else this.audio.resume();
+  }
+
+  updateHelicopterCamera(delta) {
+    const view = this.playerController.getCameraTarget(this.camera);
+    const blend = Math.min(1, delta * 4);
+    this.camera.position.lerp(view.position, blend);
+    this.camera.lookAt(view.lookAt.x, view.lookAt.y, view.lookAt.z);
   }
 
   /**
@@ -377,9 +520,28 @@ export class Game {
       this.inputManager.dispose();
     }
     
+    if (this.chunkManager) {
+      this.chunkManager.dispose();
+    }
+
+    if (this.enemyManager) {
+      this.enemyManager.dispose();
+    }
+
+    if (this.projectileManager) this.projectileManager.dispose();
+    if (this.explosion) this.explosion.dispose();
+    if (this.aaGun) this.aaGun.dispose();
+
     if (this.physicsWorld) {
       this.physicsWorld.dispose();
     }
+
+    this.audio?.dispose();
+
+    if (this.damageSystem) {
+      this.damageSystem.dispose();
+    }
+
     
     if (this.debugRenderer) {
       this.debugRenderer.dispose();
